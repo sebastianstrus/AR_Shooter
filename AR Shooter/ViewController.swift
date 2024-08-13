@@ -26,6 +26,8 @@ class ViewController: UIViewController {
         
         arView.session.delegate = self
         
+        UIApplication.shared.isIdleTimerDisabled = true
+        
         let tapGetureRecognize = UITapGestureRecognizer(target: self, action: #selector(handleTap(recognizer:)))
         arView.addGestureRecognizer(tapGetureRecognize)
     }
@@ -43,13 +45,17 @@ class ViewController: UIViewController {
     }
     
     private func setupMultipeerSession() {
-        sessionIDObservation = observe(\.arView?.session.identifier, options: [.new], changeHandler: { object, change in
-            print("SessionID changed to: \(change.newValue)")
+        print("TEST100 setupMultipeerSession")
+        sessionIDObservation = arView.session.observe(\.identifier, options: [.new]) { object, change in
+            print("TEST100 SessionID changed to: \(change.newValue!)")
             
-            guard let multipeerSession = self.multipeerSession else { return }
+            guard let multipeerSession = self.multipeerSession else {
+                print("TEST100 no multipeerSession")
+                return
+            }
                         
             self.sendARSessionIDTo(peers: multipeerSession.connectedPeers)
-        })
+        }
         
         multipeerSession = MultipeerSession(serviceName: "multiuser-ar", receivedDataHandler: self.receivedData, peerJoinedHandler: self.peerJoined, peerLeftHandler: self.peerLeft, peerDiscoveredHandler: self.peerDiscovered)
     }
@@ -73,6 +79,7 @@ class ViewController: UIViewController {
 }
 
 extension ViewController: ARSessionDelegate {
+    
     func session(_ session: ARSession, didAdd anchors: [ARAnchor]) {
         for anchor in anchors {
             if let anchorName = anchor.name, anchorName == "LaserGreen" {
@@ -101,6 +108,7 @@ extension ViewController: ARSessionDelegate {
 // MARK: MultipeerSession
 extension ViewController {
     private func sendARSessionIDTo(peers: [PeerID]) {
+        print("TEST100 sendARSessionIDTo")
         guard let multipeerSession = multipeerSession else { return }
         let idString = arView.session.identifier.uuidString
         let command = "SessionID:" + idString
@@ -111,11 +119,14 @@ extension ViewController {
     }
     
     func receivedData(_ data: Data, from peer: PeerID) {
+        print("TEST100 receivedData")
         guard let multipeerSession = multipeerSession else { return }
         
         if let collaborationData = try? NSKeyedUnarchiver.unarchivedObject(ofClass: ARSession.CollaborationData.self, from: data) {
             arView.session.update(with: collaborationData)
             return
+        } else {
+            print("TEST100 no collaborationData")
         }
         
         let sessionIDCommandString = "SessionID:"
@@ -123,7 +134,7 @@ extension ViewController {
             let newSessionID = String(commandString[commandString.index(commandString.startIndex, offsetBy: sessionIDCommandString.count)...])
             
             if let oldSessionID = multipeerSession.peerSessionIDs[peer] {
-                removeAllAnchorsOriginatingFromARSessionWithIA(oldSessionID)
+                removeAllAnchorsOriginatingFromARSessionWithID(oldSessionID)
             }
             
             multipeerSession.peerSessionIDs[peer] = newSessionID
@@ -131,7 +142,9 @@ extension ViewController {
     }
     
     func peerDiscovered(_ peer: PeerID) -> Bool {
-        guard let multipeerSession = multipeerSession else { return false }
+        print("TEST100 peerDiscovered")
+        guard let multipeerSession = multipeerSession else {  print("TEST100 no session")
+            return false }
         
         if multipeerSession.connectedPeers.count > 4 {
             print("5th player wants to join")
@@ -153,12 +166,12 @@ extension ViewController {
         print("Player has left the game")
         
         if let sessionId = multipeerSession.peerSessionIDs[peer] {
-            removeAllAnchorsOriginatingFromARSessionWithIA(sessionId)
+            removeAllAnchorsOriginatingFromARSessionWithID(sessionId)
             multipeerSession.peerSessionIDs.removeValue(forKey: peer)
         }
     }
 
-    func removeAllAnchorsOriginatingFromARSessionWithIA(_ identifier: String) {
+    func removeAllAnchorsOriginatingFromARSessionWithID(_ identifier: String) {
         guard let frame = arView.session.currentFrame else { return }
         
         for anchor in frame.anchors {
